@@ -127,6 +127,9 @@ object Gen {
 
   def unionViaWeighted[A](g1: Gen[A], g2: Gen[A]): Gen[A] =
     weighted((g1, 0.5), (g2, 0.5))
+
+  def listOf[A](gen: Gen[A]): SGen[List[A]] =
+    SGen(n => listOfN(n, gen))
 }
 
 case class Gen[A](sample: State[RNG, A]) {
@@ -138,6 +141,8 @@ case class Gen[A](sample: State[RNG, A]) {
 
   def listOfN(size: Gen[Int]): Gen[List[A]] =
     size.flatMap(n => Gen.listOfN(n, this))
+
+  def unsize: SGen[A] = SGen(_ => this)
 }
 
-trait SGen[+A] {}
+case class SGen[+A](forSize: Int => Gen[A]) {}
