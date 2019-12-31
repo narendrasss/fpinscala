@@ -14,7 +14,28 @@ The library developed in this chapter goes through several iterations. This file
 
 // TestCases refers to the number of cases that should pass for the Prop to be considered as passing.
 case class Prop(run: (TestCases, RNG) => Result) {
-  def check: Result = ???
+
+  /**
+    * Run this prop, then if it passes, run the next prop.
+    */
+  def &&(p: Prop): Prop =
+    (n, rng) =>
+      run(n, rng) match {
+        case Passed => p.run(n, rng)
+        case x      => x
+      }
+
+  /**
+    * Run the first prop, if it fails, run the second prop.
+    * This has the problem of the caller not knowing whether
+    * the failure came from the first prop or the second prop.
+    */
+  def ||(p: Prop): Prop =
+    (n, rng) =>
+      run(n, rng) match {
+        case Failed(_, _) => p.run(n, rng)
+        case x            => x
+      }
 }
 
 object Prop {
