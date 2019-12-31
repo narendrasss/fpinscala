@@ -13,7 +13,11 @@ The library developed in this chapter goes through several iterations. This file
  */
 
 // TestCases refers to the number of cases that should pass for the Prop to be considered as passing.
-case class Prop(run: TestCases => Result) {
+case class Prop(run: (TestCases, RNG) => Result) {
+  def check: Result = ???
+}
+
+object Prop {
   type TestCases = Int
   type FailedCase = String
   type SuccessCount = Int
@@ -29,11 +33,40 @@ case class Prop(run: TestCases => Result) {
     def isFailed: Boolean = true
   }
 
-  def check: Result
-}
+  // Generate an infinite stream by repeatedly sampling a Gen
+  def randomStream[A](g: Gen[A])(rng: RNG): Stream[A] =
+    Stream.unfold(rng)(rng => Some(g.sample.run(rng)))
 
-object Prop {
-  def forAll[A](gen: Gen[A])(f: A => Boolean): Prop = ???
+  def buildMessage[A](testCase: A, error: Exception): String =
+    s"test case: $testCase\n" +
+      s"generated an exception: ${error.getMessage}\n" +
+      s"stack trace:\n ${error.getStackTrace.mkString("\n")}"
+
+  /**
+    * 1. Generate an infinite random stream using the given Gen.
+    * 2. Convert the stream into a stream of (TestCase, index) tuples.
+    * 3. Take n test cases.
+    * 4. Apply the predicate to each test case. If it passes, return
+    *    Passed otherwise return Failed.
+    * 5. Find the first Failed case.
+    * 6. Return the Failed case, or if it doesn't exist, return Passed.
+    */
+  def forAll[A](gen: Gen[A])(pred: A => Boolean): Prop =
+    (n, rng) =>
+      randomStream(gen)(rng)
+        .zip(Stream.from(0))
+        .take(n)
+        .map {
+          case (testCase, index) =>
+            try {
+              if (pred(testCase)) Passed else Failed(testCase.toString, index)
+            } catch {
+              case error: Exception =>
+                Failed(buildMessage(testCase, error), index)
+            }
+        }
+        .find(_.isFailed)
+        .getOrElse(Passed)
 }
 
 object Gen {
